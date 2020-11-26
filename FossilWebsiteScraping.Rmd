@@ -1,0 +1,86 @@
+---
+title: "Fossil Website Scraping"
+output:
+  html_document:
+    df_print: paged
+---
+
+Don Kelly (http://donaldkenney.x10.mx/FOSSINDX.HTM) has created a well curated website that contains, among other things, a list of 16000 fossil sites in the United States and Canada. This list is nicely formatted into a series of html tables on webpages for each state/province. The table includes various information (e.g., lat-long, formation, fossils) for each locality.
+
+The structure and content of the website make it an interesting dataset to practice web scraping as well as producing geospatial visualizations. The goal of this project is to scrape the data from the multiple websites and html tables, format data into a single table representing all 16000 fossil localities, then produce some visualizations from the dataset.
+
+Required libraries
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(rvest)
+library(leaflet)
+library(qdapRegex)
+```
+
+### 1. Assemble data from the web
+This is going to be done in by gathering a list of the URL's to the indivdual tables (listed on: http://donaldkenney.x10.mx/FOSSINDX.HTM). Then we will loop through the list of URL's scraping the html tables and appending them to a master table. Once we have a master table we will reformat and tidy the data. This first section will coerce many variables due to the structure and completeness of the html tables.
+
+```{r, warning=FALSE}
+#Get structure of main website and create list of links to individual tables
+website <- "http://donaldkenney.x10.mx/FOSSINDX.HTM"
+website_structure <- read_html(website)
+website_structure <- website_structure %>% html_nodes("li")
+
+#Set up some constants prior to entering the for loop
+url_prefix <- "http://donaldkenney.x10.mx/"
+fossil_table <- NULL
+
+#start the for loop that will scrape individual tables on separate URL's
+for (i in 1:length(website_structure)){
+  #assemble the entire URL that we need to navigate to  
+  url_suffex <- qdapRegex::ex_between(website_structure[i], '"', '"')
+  url <- paste(url_prefix,url_suffex,sep="")
+  
+  #scrape the indvidual table
+  fossils <- read_html(url)
+  fossildf <- fossils %>% html_nodes("table") %>% html_table(fill=TRUE)
+  fossildf <- fossildf[[1]]
+
+  #bind indiviudal table to the master table
+  fossil_table <- rbind(fossil_table,fossildf)
+}
+
+#rename some columns
+names <- colnames(fossil_table)
+names[10:15] <- c("10","LatLong","12","13","14","15")
+colnames(fossil_table) <- names
+
+#Mutate in lat/long columns and select the required columns  
+fossil_table <- fossil_table %>% 
+  mutate(Latitude = substr(LatLong,1,7), Longitude = substr(LatLong,9,17)) %>%
+  select(Location,County,`State/Province`,`Directions,Notes`,Age,Formation,Fossils,Latitude,Longitude)
+
+#Change lat/long to numeric from string.    
+fossil_table$Latitude <- as.numeric(fossil_table$Latitude) 
+fossil_table$Longitude <- as.numeric(fossil_table$Longitude)
+
+#view final table
+str(fossil_table)
+
+```
+
+### 2. Use leaflet to make an interactive map of fossil localities
+It should be emphasized here that there are ~16000 observations in this dataframe, so trying to plot all the fossil localities in North America will be computationally taxing. It is recommended that you filter by state as done below.
+```{r, warning=FALSE}
+#Filter data to include one or more states/provinces. State/province codes are listed below:
+#"AB" "AK" "AL" "AR" "AZ" "BA" "BC" "CA" "CO" "CT" "DC" "DE" "FL" "GA" "HI" "IA" "ID" "IL" "IN" "KS" "KY" "LA" "MA" "MB" "MD" "ME" "MI" "MN" "MO" "MS" "MT" "NB" "NC"
+#"ND" "NE" "NH" "NJ" "NL" "NM" "NS" "NT" "NU" "NV" "NY" "OH" "OK" "ON" "OR" "PE" "PA" "QC" "RI" "SC" "SD" "SK" "TN" "TX" "UT" "VA" "VT" "WA" "WI" "WV" "WY" "YT"
+SearchLocation <- c("BC")
+
+fossil_map <- fossil_table %>% filter(`State/Province`==SearchLocation) # the master table will be filtered into a dataframe for mapping (fossil_map)
+
+#Use leaflet package to make a map of fossil localtities within the fossil_map dataframe
+m <- leaflet() %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addMarkers(lng=fossil_map$Longitude, lat=fossil_map$Latitude, 
+            popup=paste("Fossils: ", fossil_map$Fossils, "<br/>", 
+            "Formation: ", fossil_map$Formation))
+m
+
+```
+
