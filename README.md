@@ -10,3 +10,6 @@ I use this when I go out into the mountains to see if there are any localities n
 #### ALWAYS follow local laws and regulations for collecting fossils.
 
 Below are examples of maps generated from this website for British Columbia, Montana, and Colorado.
+<p align="center">
+  <img width="1248" height="262" src="https://github.com/ActiveMargins/FossilMapWebScraping/blob/main/images/ExampleMaps.jpg">
+</p>
